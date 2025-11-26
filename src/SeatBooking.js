@@ -1,267 +1,120 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useSeatBooking } from './hooks/useSeatBooking';
+import SeatGrid from './components/SeatGrid';
+import BookingSummary from './components/BookingSummary';
+import SeatStats from './components/SeatStats';
+import Controls from './components/Controls';
+import Legend from './components/Legend';
+import ConfirmationModal from './components/ConfirmationModal';
+import { Tooltip } from 'react-tooltip';
 import './SeatBooking.css';
 
-const SEAT_STATUS = {
-    AVAILABLE: 'available',
-    SELECTED: 'selected',
-    BOOKED: 'booked'
-};
-
-const SEAT_PRICES = {
-    PREMIUM: 1000,  // Rows A-C (0-2)
-    STANDARD: 750,  // Rows D-F (3-5)
-    ECONOMY: 500    // Rows G-H (6-7)
-};
-
-const MAX_SEATS_PER_BOOKING = 8;
-
+/**
+ * SeatBooking Component
+ * 
+ * The main container for the Seat Booking Application.
+ * It manages the global theme state and coordinates the interaction between
+ * the seat grid, controls, and booking logic.
+ * 
+ * @returns {JSX.Element} The rendered SeatBooking component.
+ */
 const SeatBooking = () => {
-    const ROWS = 8;
-    const SEATS_PER_ROW = 10;
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [theme, setTheme] = useState('light');
 
-    const initializeSeats = () => {
-        const savedSeats = localStorage.getItem('seatBookingData');
-        if (savedSeats) {
-            return JSON.parse(savedSeats);
-        }
-        const seats = [];
-        for (let row = 0; row < ROWS; row++) {
-            const rowSeats = [];
-            for (let seat = 0; seat < SEATS_PER_ROW; seat++) {
-                rowSeats.push({
-                    id: `${row}-${seat}`,
-                    row: row,
-                    seat: seat,
-                    status: SEAT_STATUS.AVAILABLE
-                });
-            }
-            seats.push(rowSeats);
-        }
-        return seats;
+    // Destructure logic and state from the custom hook
+    const {
+        seats,
+        selectedCount,
+        bookedCount,
+        availableCount,
+        totalPrice,
+        handleSeatClick,
+        handleBookSeats,
+        handleClearSelection,
+        handleReset,
+        getSeatPrice
+    } = useSeatBooking();
+
+    // Effect to apply the theme to the document root
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+    }, [theme]);
+
+    /**
+     * Toggles the application theme between 'light' and 'dark'.
+     */
+    const toggleTheme = () => {
+        setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
     };
 
-    const [seats, setSeats] = useState(initializeSeats());
-
-    const getSeatPrice = (row) => {
-        if (row < 3) return SEAT_PRICES.PREMIUM;
-        if (row < 6) return SEAT_PRICES.STANDARD;
-        return SEAT_PRICES.ECONOMY;
-    };
+    const openResetModal = () => setIsResetModalOpen(true);
+    const closeResetModal = () => setIsResetModalOpen(false);
     
-    const getSelectedCount = () => {
-        return seats.reduce((acc, row) => 
-            acc + row.filter(seat => seat.status === SEAT_STATUS.SELECTED).length, 0);
-    };
-
-    const getBookedCount = () => {
-        return seats.reduce((acc, row) => 
-            acc + row.filter(seat => seat.status === SEAT_STATUS.BOOKED).length, 0);
-    };
-
-    const getAvailableCount = () => {
-        return seats.reduce((acc, row) => 
-            acc + row.filter(seat => seat.status === SEAT_STATUS.AVAILABLE).length, 0);
-    };
-
-    const calculateTotalPrice = () => {
-        return seats.reduce((acc, row, rowIndex) => {
-            const selectedInRow = row.filter(seat => seat.status === SEAT_STATUS.SELECTED).length;
-            return acc + (selectedInRow * getSeatPrice(rowIndex));
-        }, 0);
-    };
-
-    const validateGapRule = () => {
-        for (let row of seats) {
-            // Find all occupied seats (Selected or Booked) in this row
-            const occupiedIndices = row
-                .map((seat, index) => (seat.status === SEAT_STATUS.SELECTED || seat.status === SEAT_STATUS.BOOKED) ? index : -1)
-                .filter(index => index !== -1);
-
-            // If less than 2 occupied seats, no gaps to check between them
-            if (occupiedIndices.length < 2) continue;
-
-            // Check for gaps between occupied seats
-            for (let i = 0; i < occupiedIndices.length - 1; i++) {
-                const current = occupiedIndices[i];
-                const next = occupiedIndices[i + 1];
-
-                // If the difference is greater than 1, there is at least one seat in between.
-                // Since we collected ALL occupied seats, the seats in between MUST be Available.
-                if (next - current > 1) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    };
-    
-    const handleSeatClick = (rowIndex, seatIndex) => {
-        const currentSeat = seats[rowIndex][seatIndex];
-        
-        if (currentSeat.status === SEAT_STATUS.BOOKED) return;
-
-        if (currentSeat.status === SEAT_STATUS.AVAILABLE) {
-            if (getSelectedCount() >= MAX_SEATS_PER_BOOKING) {
-                alert(`You can only select up to ${MAX_SEATS_PER_BOOKING} seats`);
-                return;
-            }
-        }
-
-        const newSeats = seats.map((row, rIndex) => {
-            if (rIndex !== rowIndex) return row;
-            return row.map((seat, sIndex) => {
-                if (sIndex !== seatIndex) return seat;
-                return {
-                    ...seat,
-                    status: seat.status === SEAT_STATUS.AVAILABLE 
-                        ? SEAT_STATUS.SELECTED 
-                        : SEAT_STATUS.AVAILABLE
-                };
-            });
-        });
-
-        setSeats(newSeats);
-    };
-
-    const handleBookSeats = () => {
-        // Run validation before processing payment/booking
-        if (!validateGapRule()) {
-            return; // Alert is handled inside the validator
-        }
-
-        const selectedCount = getSelectedCount();
-        const totalPrice = calculateTotalPrice();
-
-        if (window.confirm(`Confirm booking for ${selectedCount} seats? Total Price: ₹${totalPrice}`)) {
-            const newSeats = seats.map(row => 
-                row.map(seat => ({
-                    ...seat,
-                    status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.BOOKED : seat.status
-                }))
-            );
-            setSeats(newSeats);
-            localStorage.setItem('seatBookingData', JSON.stringify(newSeats));
-            alert('Booking Confirmed!');
-            
-            // Optional: Auto-clear selection after booking (usually good UX)
-             const clearedSeats = newSeats.map(row => 
-                row.map(seat => ({
-                    ...seat,
-                    status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.AVAILABLE : seat.status
-                }))
-            );
-             setSeats(clearedSeats);
-        }
-    };
-
-    const handleClearSelection = () => {
-        const newSeats = seats.map(row => 
-            row.map(seat => ({
-                ...seat,
-                status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.AVAILABLE : seat.status
-            }))
-        );
-        setSeats(newSeats);
-    };
-
-    const handleReset = () => {
-        if(window.confirm("Are you sure you want to reset the entire system? All bookings will be lost.")) {
-            localStorage.removeItem('seatBookingData');
-            const resetSeats = [];
-            for (let row = 0; row < ROWS; row++) {
-                const rowSeats = [];
-                for (let seat = 0; seat < SEATS_PER_ROW; seat++) {
-                    rowSeats.push({
-                        id: `${row}-${seat}`,
-                        row: row,
-                        seat: seat,
-                        status: SEAT_STATUS.AVAILABLE
-                    });
-                }
-                resetSeats.push(rowSeats);
-            }
-            setSeats(resetSeats);
-        }
+    /**
+     * Confirms the system reset action.
+     * Calls the handleReset function from the hook and closes the modal.
+     */
+    const confirmReset = () => {
+        handleReset();
+        closeResetModal();
     };
 
     return (
         <div className="seat-booking-container">
+            {/* Theme Toggle Button */}
+            <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
+                {theme === 'light' ? '🌙' : '☀️'}
+            </button>
+
             <h1>GreenStitch Seat Booking System</h1>
 
-            <div className="info-panel">
-                <div className="info-item">
-                    <span className="info-label">Available:</span>
-                    <span className="info-value">{getAvailableCount()}</span>
-                </div>
-                <div className="info-item">
-                    <span className="info-label">Selected:</span>
-                    <span className="info-value">{getSelectedCount()}</span>
-                </div>
-                <div className="info-item">
-                    <span className="info-label">Booked:</span>
-                    <span className="info-value">{getBookedCount()}</span>
-                </div>
-            </div>
+            {/* Statistics Section */}
+            <SeatStats 
+                availableCount={availableCount}
+                selectedCount={selectedCount}
+                bookedCount={bookedCount}
+            />
 
-            <div className="legend">
-                <div className="legend-item">
-                    <div className="seat-demo available"></div>
-                    <span>Available</span>
-                </div>
-                <div className="legend-item">
-                    <div className="seat-demo selected"></div>
-                    <span>Selected</span>
-                </div>
-                <div className="legend-item">
-                    <div className="seat-demo booked"></div>
-                    <span>Booked</span>
-                </div>
-            </div>
+            {/* Legend Section */}
+            <Legend />
 
-            <div className="seat-grid">
-                {seats.map((row, rowIndex) => (
-                    <div key={rowIndex} className="seat-row">
-                        <div className="row-label">{String.fromCharCode(65 + rowIndex)}</div>
-                        {row.map((seat, seatIndex) => (
-                            <div
-                                key={seat.id}
-                                className={`seat ${seat.status}`}
-                                onClick={() => handleSeatClick(rowIndex, seatIndex)}
-                            >
-                                {seatIndex + 1}
-                            </div>
-                        ))}
-                    </div>
-                ))}
-            </div>
+            {/* Main Seat Grid */}
+            <SeatGrid 
+                seats={seats} 
+                onSeatClick={handleSeatClick} 
+                getSeatPrice={getSeatPrice}
+            />
 
-            <div className="pricing-info">
-                <p>Selected Seats Total: <strong>₹{calculateTotalPrice()}</strong></p>
-                <p className="price-note">Premium (A-C): ₹1000 | Standard (D-F): ₹750 | Economy (G-H): ₹500</p>
-            </div>
+            {/* Booking Summary Section */}
+            <BookingSummary 
+                totalPrice={totalPrice} 
+            />
 
-            <div className="control-panel">
-                <button
-                    className="btn btn-book"
-                    onClick={handleBookSeats}
-                    disabled={getSelectedCount() === 0}
-                >
-                    Book Selected Seats ({getSelectedCount()})
-                </button>
-                <button
-                    className="btn btn-clear"
-                    onClick={handleClearSelection}
-                    disabled={getSelectedCount() === 0}
-                >
-                    Clear Selection
-                </button>
-                <button
-                    className="btn btn-reset"
-                    onClick={handleReset}
-                >
-                    Reset All
-                </button>
-            </div>
+            {/* Action Controls */}
+            <Controls
+                selectedCount={selectedCount}
+                onBook={handleBookSeats}
+                onClear={handleClearSelection}
+                onReset={openResetModal}
+            />
+
+            {/* Reset Confirmation Modal */}
+            <ConfirmationModal 
+                isOpen={isResetModalOpen}
+                onClose={closeResetModal}
+                onConfirm={confirmReset}
+                title="Reset System"
+                message="Are you sure you want to reset the entire system? All bookings will be lost."
+            />
+
+            {/* Global Toast Notifications */}
+            <ToastContainer position="bottom-right" theme={theme} />
+            
+            {/* Global Tooltip Component */}
+            <Tooltip id="seat-tooltip" place="top" />
         </div>
     );
 };
