@@ -74,18 +74,36 @@ const SeatBooking = () => {
 
     const validateGapRule = () => {
         for (let row of seats) {
+            // 1. Check for single gap pattern: [Occupied] [Available] [Occupied]
             for (let i = 0; i < row.length - 2; i++) {
                 const left = row[i];
                 const middle = row[i+1];
                 const right = row[i+2];
                 
-                // Check for pattern: [Selected/Booked] [Available] [Selected/Booked]
                 const isLeftOccupied = left.status === SEAT_STATUS.SELECTED || left.status === SEAT_STATUS.BOOKED;
                 const isRightOccupied = right.status === SEAT_STATUS.SELECTED || right.status === SEAT_STATUS.BOOKED;
                 const isMiddleAvailable = middle.status === SEAT_STATUS.AVAILABLE;
 
                 if (isLeftOccupied && isRightOccupied && isMiddleAvailable) {
                     return false;
+                }
+            }
+
+            // 2. Check for continuity between selected seats
+            // "Non-continuous selections are permitted only when the gap is due to booked seats, not available ones."
+            const selectedIndices = row
+                .map((seat, index) => seat.status === SEAT_STATUS.SELECTED ? index : -1)
+                .filter(index => index !== -1);
+
+            if (selectedIndices.length > 1) {
+                const firstSelected = selectedIndices[0];
+                const lastSelected = selectedIndices[selectedIndices.length - 1];
+                
+                // Check all seats between the first and last selected seat
+                for (let i = firstSelected + 1; i < lastSelected; i++) {
+                    if (row[i].status === SEAT_STATUS.AVAILABLE) {
+                        return false;
+                    }
                 }
             }
         }
