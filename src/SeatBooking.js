@@ -42,8 +42,6 @@ const SeatBooking = () => {
 
     const [seats, setSeats] = useState(initializeSeats());
 
-    // TODO: Implement all required functionality below
-
     const getSeatPrice = (row) => {
         if (row < 3) return SEAT_PRICES.PREMIUM;
         if (row < 6) return SEAT_PRICES.STANDARD;
@@ -74,42 +72,29 @@ const SeatBooking = () => {
 
     const validateGapRule = () => {
         for (let row of seats) {
-            // 1. Check for single gap pattern: [Occupied] [Available] [Occupied]
-            for (let i = 0; i < row.length - 2; i++) {
-                const left = row[i];
-                const middle = row[i+1];
-                const right = row[i+2];
-                
-                const isLeftOccupied = left.status === SEAT_STATUS.SELECTED || left.status === SEAT_STATUS.BOOKED;
-                const isRightOccupied = right.status === SEAT_STATUS.SELECTED || right.status === SEAT_STATUS.BOOKED;
-                const isMiddleAvailable = middle.status === SEAT_STATUS.AVAILABLE;
-
-                if (isLeftOccupied && isRightOccupied && isMiddleAvailable) {
-                    return false;
-                }
-            }
-
-            // 2. Check for continuity between selected seats
-            // "Non-continuous selections are permitted only when the gap is due to booked seats, not available ones."
-            const selectedIndices = row
-                .map((seat, index) => seat.status === SEAT_STATUS.SELECTED ? index : -1)
+            // Find all occupied seats (Selected or Booked) in this row
+            const occupiedIndices = row
+                .map((seat, index) => (seat.status === SEAT_STATUS.SELECTED || seat.status === SEAT_STATUS.BOOKED) ? index : -1)
                 .filter(index => index !== -1);
 
-            if (selectedIndices.length > 1) {
-                const firstSelected = selectedIndices[0];
-                const lastSelected = selectedIndices[selectedIndices.length - 1];
-                
-                // Check all seats between the first and last selected seat
-                for (let i = firstSelected + 1; i < lastSelected; i++) {
-                    if (row[i].status === SEAT_STATUS.AVAILABLE) {
-                        return false;
-                    }
+            // If less than 2 occupied seats, no gaps to check between them
+            if (occupiedIndices.length < 2) continue;
+
+            // Check for gaps between occupied seats
+            for (let i = 0; i < occupiedIndices.length - 1; i++) {
+                const current = occupiedIndices[i];
+                const next = occupiedIndices[i + 1];
+
+                // If the difference is greater than 1, there is at least one seat in between.
+                // Since we collected ALL occupied seats, the seats in between MUST be Available.
+                if (next - current > 1) {
+                    return false;
                 }
             }
         }
         return true;
     };
-
+    
     const handleSeatClick = (rowIndex, seatIndex) => {
         const currentSeat = seats[rowIndex][seatIndex];
         
@@ -139,9 +124,9 @@ const SeatBooking = () => {
     };
 
     const handleBookSeats = () => {
+        // Run validation before processing payment/booking
         if (!validateGapRule()) {
-            alert("Invalid selection! You cannot leave a single empty seat between selected/booked seats.");
-            return;
+            return; // Alert is handled inside the validator
         }
 
         const selectedCount = getSelectedCount();
@@ -157,6 +142,15 @@ const SeatBooking = () => {
             setSeats(newSeats);
             localStorage.setItem('seatBookingData', JSON.stringify(newSeats));
             alert('Booking Confirmed!');
+            
+            // Optional: Auto-clear selection after booking (usually good UX)
+             const clearedSeats = newSeats.map(row => 
+                row.map(seat => ({
+                    ...seat,
+                    status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.AVAILABLE : seat.status
+                }))
+            );
+             setSeats(clearedSeats);
         }
     };
 
