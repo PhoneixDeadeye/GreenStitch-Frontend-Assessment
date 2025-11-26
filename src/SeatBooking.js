@@ -40,16 +40,33 @@ const SeatBooking = () => {
 
     // TODO: Implement all required functionality below
 
-    const getSeatPrice = (row) => { return 0; };
+    const getSeatPrice = (row) => {
+        if (row < 3) return SEAT_PRICES.PREMIUM;
+        if (row < 6) return SEAT_PRICES.STANDARD;
+        return SEAT_PRICES.ECONOMY;
+    };
     
     const getSelectedCount = () => {
         return seats.reduce((acc, row) => 
             acc + row.filter(seat => seat.status === SEAT_STATUS.SELECTED).length, 0);
     };
 
-    const getBookedCount = () => { return 0; };
-    const getAvailableCount = () => { return 0; };
-    const calculateTotalPrice = () => { return 0; };
+    const getBookedCount = () => {
+        return seats.reduce((acc, row) => 
+            acc + row.filter(seat => seat.status === SEAT_STATUS.BOOKED).length, 0);
+    };
+
+    const getAvailableCount = () => {
+        return seats.reduce((acc, row) => 
+            acc + row.filter(seat => seat.status === SEAT_STATUS.AVAILABLE).length, 0);
+    };
+
+    const calculateTotalPrice = () => {
+        return seats.reduce((acc, row, rowIndex) => {
+            const selectedInRow = row.filter(seat => seat.status === SEAT_STATUS.SELECTED).length;
+            return acc + (selectedInRow * getSeatPrice(rowIndex));
+        }, 0);
+    };
 
     const handleSeatClick = (rowIndex, seatIndex) => {
         const currentSeat = seats[rowIndex][seatIndex];
@@ -81,14 +98,30 @@ const SeatBooking = () => {
 
     const handleBookSeats = () => {
         // TODO: Implement booking logic
+        const newSeats = seats.map(row => 
+            row.map(seat => ({
+                ...seat,
+                status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.BOOKED : seat.status
+            }))
+        );
+        setSeats(newSeats);
+        alert('Booking Successful!');
     };
 
     const handleClearSelection = () => {
         // TODO: Implement clear selection logic
+        const newSeats = seats.map(row => 
+            row.map(seat => ({
+                ...seat,
+                status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.AVAILABLE : seat.status
+            }))
+        );
+        setSeats(newSeats);
     };
 
     const handleReset = () => {
         // TODO: Implement reset logic
+        setSeats(initializeSeats());
     };
 
     return (
