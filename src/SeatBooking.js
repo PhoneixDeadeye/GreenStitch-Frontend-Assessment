@@ -20,6 +20,10 @@ const SeatBooking = () => {
     const SEATS_PER_ROW = 10;
 
     const initializeSeats = () => {
+        const savedSeats = localStorage.getItem('seatBookingData');
+        if (savedSeats) {
+            return JSON.parse(savedSeats);
+        }
         const seats = [];
         for (let row = 0; row < ROWS; row++) {
             const rowSeats = [];
@@ -68,6 +72,26 @@ const SeatBooking = () => {
         }, 0);
     };
 
+    const validateGapRule = () => {
+        for (let row of seats) {
+            for (let i = 0; i < row.length - 2; i++) {
+                const left = row[i];
+                const middle = row[i+1];
+                const right = row[i+2];
+                
+                // Check for pattern: [Selected/Booked] [Available] [Selected/Booked]
+                const isLeftOccupied = left.status === SEAT_STATUS.SELECTED || left.status === SEAT_STATUS.BOOKED;
+                const isRightOccupied = right.status === SEAT_STATUS.SELECTED || right.status === SEAT_STATUS.BOOKED;
+                const isMiddleAvailable = middle.status === SEAT_STATUS.AVAILABLE;
+
+                if (isLeftOccupied && isRightOccupied && isMiddleAvailable) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
     const handleSeatClick = (rowIndex, seatIndex) => {
         const currentSeat = seats[rowIndex][seatIndex];
         
@@ -97,19 +121,28 @@ const SeatBooking = () => {
     };
 
     const handleBookSeats = () => {
-        // TODO: Implement booking logic
-        const newSeats = seats.map(row => 
-            row.map(seat => ({
-                ...seat,
-                status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.BOOKED : seat.status
-            }))
-        );
-        setSeats(newSeats);
-        alert('Booking Successful!');
+        if (!validateGapRule()) {
+            alert("Invalid selection! You cannot leave a single empty seat between selected/booked seats.");
+            return;
+        }
+
+        const selectedCount = getSelectedCount();
+        const totalPrice = calculateTotalPrice();
+
+        if (window.confirm(`Confirm booking for ${selectedCount} seats? Total Price: ₹${totalPrice}`)) {
+            const newSeats = seats.map(row => 
+                row.map(seat => ({
+                    ...seat,
+                    status: seat.status === SEAT_STATUS.SELECTED ? SEAT_STATUS.BOOKED : seat.status
+                }))
+            );
+            setSeats(newSeats);
+            localStorage.setItem('seatBookingData', JSON.stringify(newSeats));
+            alert('Booking Confirmed!');
+        }
     };
 
     const handleClearSelection = () => {
-        // TODO: Implement clear selection logic
         const newSeats = seats.map(row => 
             row.map(seat => ({
                 ...seat,
@@ -120,8 +153,23 @@ const SeatBooking = () => {
     };
 
     const handleReset = () => {
-        // TODO: Implement reset logic
-        setSeats(initializeSeats());
+        if(window.confirm("Are you sure you want to reset the entire system? All bookings will be lost.")) {
+            localStorage.removeItem('seatBookingData');
+            const resetSeats = [];
+            for (let row = 0; row < ROWS; row++) {
+                const rowSeats = [];
+                for (let seat = 0; seat < SEATS_PER_ROW; seat++) {
+                    rowSeats.push({
+                        id: `${row}-${seat}`,
+                        row: row,
+                        seat: seat,
+                        status: SEAT_STATUS.AVAILABLE
+                    });
+                }
+                resetSeats.push(rowSeats);
+            }
+            setSeats(resetSeats);
+        }
     };
 
     return (
